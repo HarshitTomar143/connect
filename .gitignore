@@ -1,0 +1,12 @@
+# Node modules (both frontend & backend)
+client/node_modules/
+server/node_modules/
+
+# Optional but recommended
+.env
+.env.local
+.env.*
+dist/
+build/
+.next/
+coverage/
