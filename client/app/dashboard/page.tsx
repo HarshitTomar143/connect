@@ -23,12 +23,29 @@ export default function DashboardPage() {
     nickname?: string;
     avatar?: string;
     isOnline?: boolean;
+    lastSeen?: string | null;
+    location?: string | null;
   };
   const [users, setUsers] = useState<UserItem[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Array<{ senderId: string; content: string; createdAt?: string }>>([]);
+  const [messages, setMessages] = useState<Array<{ _id?: string; senderId: string; content: string; createdAt?: string }>>([]);
   const [text, setText] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [typing, setTyping] = useState(false);
+  const [settings, setSettings] = useState<{
+    readReceiptsEnabled?: boolean;
+    shareLocation?: boolean;
+    showLastSeen?: boolean;
+  }>({});
+  const [recents, setRecents] = useState<
+    Array<{
+      _id: string;
+      other: UserItem;
+      lastMessage?: string;
+      updatedAt?: string;
+    }>
+  >([]);
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -49,39 +66,130 @@ export default function DashboardPage() {
               String(u.email).toLowerCase() !== meEmail)
         )
       );
+      const s = await API.get("/settings");
+      setSettings(s.data || {});
+      const c = await API.get("/conversations");
+      const raw: Array<{ _id: string; other: UserItem; lastMessage?: string; updatedAt?: string }> =
+        c.data || [];
+      // Keep only unique users in recents by 'other._id', most recent first
+      const seen = new Set<string>();
+      const unique: typeof raw = [];
+      for (const item of raw.sort((a, b) => {
+        const ta = new Date(a.updatedAt || 0).getTime();
+        const tb = new Date(b.updatedAt || 0).getTime();
+        return tb - ta;
+      })) {
+        const key = String(item.other._id);
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(item);
+        }
+      }
+      setRecents(unique);
     };
     if (user) run();
   }, [user]);
 
   useEffect(() => {
     if (!token) return;
-    if (socketRef.current) return;
-    const s = (connectSocket(token) as unknown) as Socket;
-    s.on("newMessage", (msg: unknown) => {
-      const m = msg as { conversationId?: string; senderId?: string; content?: string };
+    
+    let s = socketRef.current;
+    
+    // Only create new connection if one doesn't exist
+    if (!s) {
+      s = (connectSocket(token) as unknown) as Socket;
+      socketRef.current = s;
+    }
+
+    // Set up event listeners
+    const handleConnect = () => {
+      console.log("Socket connected");
+      if (conversationId) {
+        s.emit("joinConversation", conversationId);
+      }
+      const last = [...messages].pop()?.createdAt || new Date(0).toISOString();
+      s.emit("syncMessages", { lastSyncTime: last });
+    };
+
+    const handleNewMessage = (msg: unknown) => {
+      const m = msg as {
+        _id: string;
+        conversationId?: string;
+        senderId?: string;
+        content?: string;
+        createdAt?: string;
+      };
       setMessages((prev) => {
         if (!conversationId) return prev;
-        if (m.conversationId !== conversationId) return prev;
-        return [...prev, m as { senderId: string; content: string; createdAt?: string }];
+        if (String(m.conversationId) !== String(conversationId)) return prev;
+        // Avoid duplicates if already added by sendMessage
+        if (prev.find((old: any) => old._id === m._id)) return prev;
+        return [
+          ...prev,
+          m as { senderId: string; content: string; createdAt?: string; _id?: string },
+        ];
       });
-    });
-    s.on("presence", (payload: unknown) => {
+    };
+
+    const handleMissedMessages = (items: unknown) => {
+      const list = (items as Array<{ conversationId?: string; senderId: string; content: string; createdAt?: string; _id?: string }>) || [];
+      setMessages((prev) => {
+        if (!conversationId) return prev;
+        const add = list.filter((m) => String(m.conversationId) === String(conversationId));
+        if (!add.length) return prev;
+        return [...prev, ...add];
+      });
+    };
+
+    const handlePresence = (payload: unknown) => {
       const p = payload as { userId?: string; isOnline?: boolean };
       if (!p?.userId) return;
       setUsers((prev) =>
         prev.map((u) =>
-          String(u._id) === String(p.userId) ? { ...u, isOnline: !!p.isOnline } : u
+          String(u._id) === String(p.userId)
+            ? { ...u, isOnline: !!p.isOnline, lastSeen: p.isOnline ? null : new Date().toISOString() }
+            : u
         )
       );
-    });
-    socketRef.current = s;
-    return () => {
-      try {
-        s.disconnect();
-      } catch {}
-      socketRef.current = null;
     };
-  }, [token, conversationId]);
+
+    const handleUserSettingsUpdated = (payload: any) => {
+      const { userId, ...updates } = payload;
+      setUsers((prev) =>
+        prev.map((u) =>
+          String(u._id) === String(userId) ? { ...u, ...updates } : u
+        )
+      );
+    };
+
+    const handleTyping = ({ userId, conversationId: typingCid }: { userId?: string; conversationId?: string }) => {
+      if (!selectedUserId || !userId || !conversationId) return;
+      if (String(userId) !== String(selectedUserId)) return;
+      if (String(typingCid) !== String(conversationId)) return;
+      setTyping(true);
+      // Clear typing indicator after 2 seconds of inactivity
+      if ((window as any).typingTimeout) clearTimeout((window as any).typingTimeout);
+      (window as any).typingTimeout = setTimeout(() => setTyping(false), 2000);
+    };
+
+    // Register all listeners
+    s.on("connect", handleConnect);
+    s.on("newMessage", handleNewMessage);
+    s.on("missedMessages", handleMissedMessages);
+    s.on("presence", handlePresence);
+    s.on("userSettingsUpdated", handleUserSettingsUpdated);
+    s.on("typing", handleTyping);
+
+    // Clean up listeners on unmount
+    return () => {
+      s.off("connect", handleConnect);
+      s.off("newMessage", handleNewMessage);
+      s.off("missedMessages", handleMissedMessages);
+      s.off("presence", handlePresence);
+      s.off("userSettingsUpdated", handleUserSettingsUpdated);
+      s.off("typing", handleTyping);
+    };
+  }, [token, conversationId, messages, selectedUserId]);
 
   const selectUser = async (uid: string) => {
     try {
@@ -92,6 +200,21 @@ export default function DashboardPage() {
       socketRef.current?.emit("joinConversation", cid);
       const msgs = await API.get(`/messages/${cid}`);
       setMessages(msgs.data);
+      setRecents((prev) => {
+        const idx = prev.findIndex((p) => String(p.other._id) === String(uid));
+        if (idx > -1) {
+          const copy = [...prev];
+          const [item] = copy.splice(idx, 1);
+          return [item, ...copy];
+        }
+        const userInfo =
+          users.find((u) => String(u._id) === String(uid)) ||
+          ({ _id: uid } as UserItem);
+        return [
+          { _id: cid, other: userInfo, updatedAt: new Date().toISOString() },
+          ...prev,
+        ];
+      });
     } catch (e: unknown) {
       const status =
         (e as { response?: { status?: number } })?.response?.status || 0;
@@ -103,9 +226,41 @@ export default function DashboardPage() {
 
   const sendMessage = async () => {
     if (!conversationId || !text.trim()) return;
-    await API.post("/messages", { conversationId, content: text.trim() });
-    setText("");
+    try {
+      // Send message via socket for instant delivery
+      if (socketRef.current && socketRef.current.connected) {
+        socketRef.current.emit("sendMessage", {
+          conversationId,
+          content: text.trim(),
+        });
+      } else {
+        // Fallback to REST API if socket is not connected
+        const res = await API.post("/messages", {
+          conversationId,
+          content: text.trim(),
+        });
+        const msg = res.data as {
+          _id: string;
+          senderId: string;
+          content: string;
+          createdAt?: string;
+          conversationId: string;
+        };
+        // Optimistically add message if it's for current conversation
+        setMessages((prev) => {
+          if (prev.find((m: any) => m._id === msg._id)) return prev;
+          return [...prev, msg];
+        });
+      }
+      setText("");
+    } catch (err) {
+      console.error("Failed to send message:", err);
+    }
   };
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, selectedUserId]);
 
   if (loading) {
     return (
@@ -165,41 +320,165 @@ export default function DashboardPage() {
         </div>
       </aside>
       <main className="flex-1 flex flex-col">
-        <div className="h-14 border-b border-gray-200 px-4 flex items-center justify-between">
-          <div className="text-sm font-semibold">
-            {users.find((x) => x._id === selectedUserId)?.nickname ||
-              users.find((x) => x._id === selectedUserId)?.displayName ||
-              "Select a user"}
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {messages.map((m, i) => {
-            const mine = m.senderId === user._id;
-            return (
-              <div
-                key={i}
-                className={`max-w-[70%] px-3 py-2 rounded-lg border ${mine ? "ml-auto bg-black text-white border-black" : "bg-white border-gray-200"}`}
-              >
-                {m.content}
+        {selectedUserId ? (
+          <>
+            <div className="h-14 border-b border-gray-200 px-4 flex items-center justify-between">
+              <div className="text-sm">
+                <div className="font-semibold">
+                  {(users.find((x) => x._id === selectedUserId)?.nickname ||
+                    users.find((x) => x._id === selectedUserId)?.displayName) ??
+                    recents.find((r) => r.other._id === selectedUserId)?.other
+                      ?.nickname ??
+                    recents.find((r) => r.other._id === selectedUserId)?.other
+                      ?.displayName ??
+                    "Chat"}
+                </div>
+                <div className="text-xs text-gray-500 flex items-center gap-2">
+                  {(() => {
+                    const info =
+                      users.find((x) => x._id === selectedUserId) ||
+                      recents.find((r) => r.other._id === selectedUserId)?.other;
+                    const bits: string[] = [];
+                    if (typing) bits.push("typing…");
+                    if (info?.location) bits.push(info.location);
+                    if (info?.lastSeen) {
+                      const dt = new Date(info.lastSeen);
+                      bits.push(`last seen ${dt.toLocaleString()}`);
+                    }
+                    return bits.join(" • ");
+                  })()}
+                </div>
               </div>
-            );
-          })}
-        </div>
-        <div className="border-t border-gray-200 p-3 flex gap-2">
-          <Input
-            placeholder="Type a message"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-              }
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {messages.map((m) => {
+                const mine = m.senderId === user._id;
+                return (
+                  <div
+                    key={m._id || Math.random()}
+                    className={`max-w-[70%] px-3 py-2 rounded-lg border ${mine ? "ml-auto bg-black text-white border-black" : "bg-white border-gray-200"}`}
+                  >
+                    {m.content}
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+            <div className="border-t border-gray-200 p-3 flex gap-2">
+              <Input
+                placeholder="Type a message"
+                value={text}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  if (conversationId) {
+                    socketRef.current?.emit("typing", { conversationId });
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }}
+              />
+              <Button onClick={sendMessage}>Send</Button>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="text-sm font-semibold mb-3">Recent</div>
+            <div className="space-y-2">
+              {recents.map((c) => (
+                <button
+                  key={c._id}
+                  onClick={() => selectUser(c.other._id)}
+                  className="w-full text-left px-3 py-2 rounded-md border border-gray-200 hover:bg-gray-50 flex items-center gap-3"
+                >
+                  {c.other.avatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={c.other.avatar}
+                      alt={(c.other.nickname || c.other.displayName || "User") + " avatar"}
+                      className="h-8 w-8 rounded-full object-cover border border-gray-200"
+                    />
+                  ) : (
+                    <div className="h-8 w-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-[12px] font-medium border border-gray-200">
+                      <span>👤</span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate text-sm font-medium">
+                      {c.other.nickname || c.other.displayName || "User"}
+                    </div>
+                  </div>
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      c.other.isOnline ? "bg-green-500" : "bg-gray-300"
+                    }`}
+                  />
+                </button>
+              ))}
+              {recents.length === 0 ? (
+                <div className="text-xs text-gray-500">No recent chats</div>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </main>
+      <aside className="w-72 border-l border-gray-200 p-4 space-y-4">
+        <div className="text-sm font-semibold">Settings</div>
+        <label className="flex items-center justify-between text-sm">
+          <span>Read receipts</span>
+          <input
+            type="checkbox"
+            checked={!!settings.readReceiptsEnabled}
+            onChange={async (e) => {
+              const next = e.target.checked;
+              setSettings((s) => ({ ...s, readReceiptsEnabled: next }));
+              await API.put("/settings", { readReceiptsEnabled: next });
             }}
           />
-          <Button onClick={sendMessage}>Send</Button>
-        </div>
-      </main>
+        </label>
+        <label className="flex items-center justify-between text-sm">
+          <span>Share location</span>
+          <input
+            type="checkbox"
+            checked={!!settings.shareLocation}
+            onChange={async (e) => {
+                const next = e.target.checked;
+                setSettings((s) => ({ ...s, shareLocation: next }));
+                await API.put("/settings", { shareLocation: next });
+                socketRef.current?.emit("updateSettings", { shareLocation: next });
+              }}
+          />
+        </label>
+        <label className="flex items-center justify-between text-sm">
+          <span>Show last seen</span>
+          <input
+            type="checkbox"
+            checked={!!settings.showLastSeen}
+            onChange={async (e) => {
+                const next = e.target.checked;
+                setSettings((s) => ({ ...s, showLastSeen: next }));
+                await API.put("/settings", { showLastSeen: next });
+                socketRef.current?.emit("updateSettings", { showLastSeen: next });
+                // Refresh list to reflect lastSeen hiding instantly
+                const res = await API.get("/users");
+                const list: UserItem[] = res.data || [];
+                const meId = user?._id ? String(user._id) : "";
+                const meEmail = (user?.email || "").toLowerCase();
+                setUsers(
+                  list.filter(
+                    (u) =>
+                      String(u._id) !== meId &&
+                      (typeof u.email === "undefined" ||
+                        String(u.email).toLowerCase() !== meEmail)
+                  )
+                );
+              }}
+          />
+        </label>
+      </aside>
     </div>
   );
 }

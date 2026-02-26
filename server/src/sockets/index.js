@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Message from "../models/Message.js";
+import Conversation from "../models/Conversation.js";
 import { handlePresence } from "./presence.js";
 
 const onlineUsers = new Map(); 
@@ -61,16 +62,99 @@ const socketHandler = (io) => {
 
     // Join conversation room
     socket.on("joinConversation", (conversationId) => {
-      socket.join(conversationId);
+      socket.join(conversationId.toString());
+    });
+
+    // 📨 Send message via socket
+    socket.on("sendMessage", async (data) => {
+      try {
+        const { conversationId, content } = data;
+        const senderId = userId;
+
+        const conversation = await Conversation.findById(conversationId);
+
+        if (!conversation) {
+          socket.emit("messageError", { error: "Conversation not found" });
+          return;
+        }
+
+        if (!conversation.participants.some(p => p.toString() === senderId)) {
+          socket.emit("messageError", { error: "Unauthorized access to conversation" });
+          return;
+        }
+
+        const message = await Message.create({
+          conversationId,
+          senderId,
+          content,
+        });
+
+        // Update conversation lastMessage
+        conversation.lastMessage = content;
+        await conversation.save();
+
+        // Convert ObjectIds to strings for socket emission
+        const messageData = {
+          _id: message._id.toString(),
+          conversationId: message.conversationId.toString(),
+          senderId: message.senderId.toString(),
+          content: message.content,
+          createdAt: message.createdAt,
+          deliveredTo: message.deliveredTo || [],
+          readBy: message.readBy || [],
+        };
+
+        // Emit to all participants in conversation (including sender)
+        io.to(conversationId.toString()).emit("newMessage", messageData);
+
+        // Mark as delivered for other participants
+        conversation.participants.forEach(async (participantId) => {
+          if (participantId.toString() !== senderId) {
+            const sockets = io.sockets.adapter.rooms.get(participantId.toString());
+
+            if (sockets) {
+              await Message.updateOne(
+                { _id: message._id },
+                {
+                  $push: {
+                    deliveredTo: {
+                      userId: participantId,
+                      deliveredAt: new Date(),
+                    },
+                  },
+                }
+              );
+
+              io.to(conversationId.toString()).emit("messageDelivered", {
+                messageId: message._id.toString(),
+                userId: participantId.toString(),
+              });
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Socket message error:", err);
+        socket.emit("messageError", { error: err.message });
+      }
     });
 
     // Typing
     socket.on("typing", ({ conversationId }) => {
-      socket.to(conversationId).emit("typing", { userId });
+      socket.to(conversationId.toString()).emit("typing", { userId, conversationId });
+    });
+
+    // Update Profile/Settings (Location/LastSeen)
+    socket.on("updateSettings", async (data) => {
+      // Broadcast settings change to all users so they can update their lists
+      io.emit("userSettingsUpdated", { userId, ...data });
     });
 
     // Read Receipt
     socket.on("markAsRead", async ({ messageId }) => {
+      const me = await User.findById(userId).select("readReceiptsEnabled");
+      if (!me?.readReceiptsEnabled) {
+        return; // user disabled read receipts
+      }
       await Message.updateOne(
         { _id: messageId, "readBy.userId": { $ne: userId } },
         {

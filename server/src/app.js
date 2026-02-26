@@ -8,6 +8,7 @@ import authRoutes from "./routes/auth.routes.js";
 import conversationRoutes from "./routes/conversation.routes.js";
 import messageRoutes from "./routes/message.routes.js";
 import userRoutes from "./routes/user.routes.js";
+import settingsRoutes from "./routes/settings.routes.js";
 
 import { errorHandler } from "./middleware/error.middleware.js";
 
@@ -36,6 +37,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/settings", settingsRoutes);
 
 
 app.use(errorHandler);

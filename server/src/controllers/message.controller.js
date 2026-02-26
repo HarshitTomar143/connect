@@ -34,13 +34,23 @@ export const sendMessage = async (req, res, next) => {
         throw new Error("Unauthorized access to conversation");
         }
 
-    // Emit to conversation room
-    io.to(conversationId).emit("newMessage", message);
+    // Convert ObjectIds to strings for socket emission
+    const messageData = {
+      _id: message._id.toString(),
+      conversationId: message.conversationId.toString(),
+      senderId: message.senderId.toString(),
+      content: message.content,
+      createdAt: message.createdAt,
+      deliveredTo: message.deliveredTo || [],
+      readBy: message.readBy || [],
+    };
 
-    // 🔥 Delivery Status
+    // Emit to conversation room (all participants including sender)
+    io.to(conversationId.toString()).emit("newMessage", messageData);
+
+    // 🔥 Delivery Status - mark as delivered for other participants
     conversation.participants.forEach(async (participantId) => {
       if (participantId.toString() !== senderId.toString()) {
-
         const sockets = io.sockets.adapter.rooms.get(participantId.toString());
 
         if (sockets) {
@@ -56,15 +66,15 @@ export const sendMessage = async (req, res, next) => {
             }
           );
 
-          io.to(conversationId).emit("messageDelivered", {
-            messageId: message._id,
-            userId: participantId,
+          io.to(conversationId.toString()).emit("messageDelivered", {
+            messageId: message._id.toString(),
+            userId: participantId.toString(),
           });
         }
       }
     });
 
-    res.status(201).json(message);
+    res.status(201).json(messageData);
 
   } catch (err) {
     next(err);

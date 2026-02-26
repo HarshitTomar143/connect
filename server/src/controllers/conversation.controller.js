@@ -32,8 +32,33 @@ export const getUserConversations = asyncHandler(async (req, res) => {
   const conversations = await Conversation.find({
     participants: userId,
   })
-    .populate("participants", "displayName email isOnline lastSeen")
+    .populate(
+      "participants",
+      "displayName nickname email avatar isOnline lastSeen showLastSeen shareLocation location"
+    )
     .sort({ updatedAt: -1 });
 
-  res.json(conversations);
+  const shaped = conversations.map((c) => {
+    const parts = c.participants.map((p) => p.toObject());
+    const other = parts.find((p) => String(p._id) !== String(userId)) || parts[0];
+    const otherShaped = {
+      _id: other._id,
+      displayName: other.displayName,
+      nickname: other.nickname,
+      email: other.email,
+      avatar: other.avatar,
+      isOnline: other.isOnline,
+      lastSeen: other.showLastSeen ? other.lastSeen : null,
+      location: other.shareLocation ? other.location || null : null,
+    };
+    return {
+      _id: c._id,
+      other: otherShaped,
+      lastMessage: c.lastMessage || "",
+      updatedAt: c.updatedAt,
+      createdAt: c.createdAt,
+    };
+  });
+
+  res.json(shaped);
 });

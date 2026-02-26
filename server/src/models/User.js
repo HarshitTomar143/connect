@@ -10,6 +10,10 @@ const userSchema = new mongoose.Schema(
     about: String,
     lastSeen: Date,
     isOnline: { type: Boolean, default: false },
+    readReceiptsEnabled: { type: Boolean, default: true },
+    shareLocation: { type: Boolean, default: false },
+    showLastSeen: { type: Boolean, default: true },
+    location: String,
   },
   { timestamps: true }
 );
