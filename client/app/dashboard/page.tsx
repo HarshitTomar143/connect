@@ -47,10 +47,28 @@ export default function DashboardPage() {
     }>
   >([]);
   const socketRef = useRef<Socket | null>(null);
+  const geolocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
+
+  // Request geolocation on mount
+  useEffect(() => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          geolocationRef.current = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          };
+        },
+        (error) => {
+          console.log("Geolocation error:", error);
+        }
+      );
+    }
+  }, []);
 
   useEffect(() => {
     const run = async () => {
@@ -104,6 +122,17 @@ export default function DashboardPage() {
     // Set up event listeners
     const handleConnect = () => {
       console.log("Socket connected");
+      
+      // Send current location if sharing is enabled
+      if (settings.shareLocation && geolocationRef.current) {
+        const { latitude, longitude } = geolocationRef.current;
+        const locationData = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+        socketRef.current?.emit("updateSettings", {
+          shareLocation: true,
+          location: locationData,
+        });
+      }
+      
       if (conversationId) {
         s.emit("joinConversation", conversationId);
       }
@@ -142,22 +171,41 @@ export default function DashboardPage() {
     };
 
     const handlePresence = (payload: unknown) => {
-      const p = payload as { userId?: string; isOnline?: boolean };
+      const p = payload as {
+        userId?: string;
+        isOnline?: boolean;
+        lastSeen?: string;
+        location?: string;
+        showLastSeen?: boolean;
+        shareLocation?: boolean;
+      };
       if (!p?.userId) return;
       setUsers((prev) =>
         prev.map((u) =>
           String(u._id) === String(p.userId)
-            ? { ...u, isOnline: !!p.isOnline, lastSeen: p.isOnline ? null : new Date().toISOString() }
+            ? {
+                ...u,
+                isOnline: !!p.isOnline,
+                lastSeen: p.lastSeen || null,
+                location: p.location || null,
+              }
             : u
         )
       );
     };
 
     const handleUserSettingsUpdated = (payload: any) => {
-      const { userId, ...updates } = payload;
+      const { userId, lastSeen, location, showLastSeen, shareLocation, ...rest } = payload;
       setUsers((prev) =>
         prev.map((u) =>
-          String(u._id) === String(userId) ? { ...u, ...updates } : u
+          String(u._id) === String(userId)
+            ? {
+                ...u,
+                lastSeen: lastSeen || u.lastSeen,
+                location: location || u.location,
+                ...rest,
+              }
+            : u
         )
       );
     };
@@ -448,7 +496,19 @@ export default function DashboardPage() {
                 const next = e.target.checked;
                 setSettings((s) => ({ ...s, shareLocation: next }));
                 await API.put("/settings", { shareLocation: next });
-                socketRef.current?.emit("updateSettings", { shareLocation: next });
+                
+                // Get location if enabling share location
+                let locationData = null;
+                if (next && geolocationRef.current) {
+                  const { latitude, longitude } = geolocationRef.current;
+                  // Use coordinates as fallback, ideally would use reverse geocoding
+                  locationData = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+                }
+                
+                socketRef.current?.emit("updateSettings", {
+                  shareLocation: next,
+                  location: locationData,
+                });
               }}
           />
         </label>

@@ -40,8 +40,18 @@ const socketHandler = (io) => {
     }
     onlineUsers.get(userId).add(socket.id);
 
+    const user = await User.findById(userId);
     await handlePresence(userId, true);
-    io.emit("presence", { userId, isOnline: true });
+    
+    // Emit presence with privacy settings
+    io.emit("presence", {
+      userId,
+      isOnline: true,
+      lastSeen: user?.showLastSeen ? new Date() : null,
+      location: user?.shareLocation ? user?.location : null,
+      showLastSeen: user?.showLastSeen,
+      shareLocation: user?.shareLocation,
+    });
 
     // Personal room (ALL devices join)
     socket.join(userId);
@@ -145,8 +155,29 @@ const socketHandler = (io) => {
 
     // Update Profile/Settings (Location/LastSeen)
     socket.on("updateSettings", async (data) => {
-      // Broadcast settings change to all users so they can update their lists
-      io.emit("userSettingsUpdated", { userId, ...data });
+      try {
+        const { shareLocation, showLastSeen, location } = data;
+        const updates = {};
+        
+        if (typeof shareLocation === "boolean") updates.shareLocation = shareLocation;
+        if (typeof showLastSeen === "boolean") updates.showLastSeen = showLastSeen;
+        if (shareLocation && location) updates.location = location;
+        
+        // Update user settings in database
+        const user = await User.findByIdAndUpdate(userId, updates, { new: true });
+        
+        // Broadcast settings change to all users with proper privacy filtering
+        io.emit("userSettingsUpdated", {
+          userId,
+          showLastSeen: user?.showLastSeen,
+          shareLocation: user?.shareLocation,
+          location: user?.shareLocation ? user?.location : null,
+          lastSeen: user?.showLastSeen ? new Date() : null,
+        });
+      } catch (err) {
+        console.error("Settings update error:", err);
+        socket.emit("settingsError", { error: err.message });
+      }
     });
 
     // Read Receipt
@@ -180,8 +211,17 @@ const socketHandler = (io) => {
         userSockets.delete(socket.id);
         if (userSockets.size === 0) {
           onlineUsers.delete(userId);
+          const user = await User.findById(userId);
           await handlePresence(userId, false);
-          io.emit("presence", { userId, isOnline: false });
+          
+          // Emit offline presence with privacy settings
+          io.emit("presence", {
+            userId,
+            isOnline: false,
+            lastSeen: user?.showLastSeen ? new Date() : null,
+            showLastSeen: user?.showLastSeen,
+            shareLocation: user?.shareLocation,
+          });
         }
       }
     });
