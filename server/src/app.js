@@ -7,6 +7,8 @@ import rateLimit from "express-rate-limit";
 import authRoutes from "./routes/auth.routes.js";
 import conversationRoutes from "./routes/conversation.routes.js";
 import messageRoutes from "./routes/message.routes.js";
+import userRoutes from "./routes/user.routes.js";
+
 import { errorHandler } from "./middleware/error.middleware.js";
 
 const app = express();
@@ -33,6 +35,8 @@ app.use(
 app.use("/api/auth", authRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/users", userRoutes);
+
 
 app.use(errorHandler);
 

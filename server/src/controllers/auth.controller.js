@@ -36,6 +36,7 @@ export const register = asyncHandler(async (req, res) => {
   res.cookie("token", token, {
     httpOnly: true,
     secure: false,
+    sameSite: "lax",
   });
 
   res.status(201).json({
@@ -65,6 +66,7 @@ export const login = asyncHandler(async (req, res) => {
   res.cookie("token", token, {
     httpOnly: true,
     secure: false,
+    sameSite: "lax",
   });
 
   res.json({
@@ -78,4 +80,30 @@ export const login = asyncHandler(async (req, res) => {
 export const logout = asyncHandler(async (req, res) => {
   res.clearCookie("token");
   res.json({ message: "Logged out successfully" });
+});
+
+export const getProfile = asyncHandler(async (req, res) => {
+  // req.user is populated by protect middleware with -passwordHash selection
+  const user = await User.findById(req.user._id).select(
+    "_id email displayName nickname avatar about createdAt updatedAt"
+  );
+  res.json(user);
+});
+
+export const updateProfile = asyncHandler(async (req, res) => {
+  const { displayName, nickname, avatar, about } = req.body;
+
+  const updates = {};
+  if (displayName !== undefined) updates.displayName = displayName;
+  if (nickname !== undefined) updates.nickname = nickname;
+  if (avatar !== undefined) updates.avatar = avatar;
+  if (about !== undefined) updates.about = about;
+
+  const user = await User.findByIdAndUpdate(req.user._id, updates, {
+    new: true,
+    runValidators: true,
+    select: "_id email displayName nickname avatar about createdAt updatedAt",
+  });
+
+  res.json(user);
 });

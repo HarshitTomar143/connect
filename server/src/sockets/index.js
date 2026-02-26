@@ -11,7 +11,17 @@ const socketHandler = (io) => {
   // 🔐 Socket Authentication
   io.use((socket, next) => {
     try {
-      const token = socket.handshake.auth.token;
+      let token = socket.handshake.auth && socket.handshake.auth.token;
+      if (!token && socket.handshake.headers?.cookie) {
+        const cookieHeader = socket.handshake.headers.cookie;
+        const parts = cookieHeader.split(";").map((c) => c.trim());
+        for (const p of parts) {
+          if (p.startsWith("token=")) {
+            token = decodeURIComponent(p.slice("token=".length));
+            break;
+          }
+        }
+      }
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       socket.userId = decoded.id;
       next();
@@ -30,6 +40,7 @@ const socketHandler = (io) => {
     onlineUsers.get(userId).add(socket.id);
 
     await handlePresence(userId, true);
+    io.emit("presence", { userId, isOnline: true });
 
     // Personal room (ALL devices join)
     socket.join(userId);
@@ -86,6 +97,7 @@ const socketHandler = (io) => {
         if (userSockets.size === 0) {
           onlineUsers.delete(userId);
           await handlePresence(userId, false);
+          io.emit("presence", { userId, isOnline: false });
         }
       }
     });
