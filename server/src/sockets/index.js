@@ -182,26 +182,43 @@ const socketHandler = (io) => {
 
     // Read Receipt
     socket.on("markAsRead", async ({ messageId }) => {
-      const me = await User.findById(userId).select("readReceiptsEnabled");
-      if (!me?.readReceiptsEnabled) {
-        return; // user disabled read receipts
-      }
-      await Message.updateOne(
-        { _id: messageId, "readBy.userId": { $ne: userId } },
-        {
-          $push: {
-            readBy: {
-              userId,
-              readAt: new Date(),
-            },
-          },
-        }
-      );
+      try {
+        const message = await Message.findById(messageId);
+        if (!message) return;
 
-      io.to(messageId).emit("messageRead", {
-        messageId,
-        userId,
-      });
+        const reader = await User.findById(userId).select("readReceiptsEnabled");
+        const sender = await User.findById(message.senderId).select("readReceiptsEnabled");
+        
+        // Check if reader has read receipts enabled (they can still receive read receipts from others)
+        // Check if sender wants to receive read receipts
+        if (!sender?.readReceiptsEnabled) {
+          return;
+        }
+
+        // Add user to readBy if not already there
+        const alreadyRead = message.readBy?.some((r) => r.userId.toString() === userId);
+        if (!alreadyRead) {
+          await Message.updateOne(
+            { _id: messageId },
+            {
+              $push: {
+                readBy: {
+                  userId,
+                  readAt: new Date(),
+                },
+              },
+            }
+          );
+        }
+
+        // Emit to the message sender (in their personal room)
+        io.to(message.senderId.toString()).emit("messageRead", {
+          messageId: messageId.toString(),
+          userId: userId.toString(),
+        });
+      } catch (err) {
+        console.error("Mark as read error:", err);
+      }
     });
 
     // Disconnect

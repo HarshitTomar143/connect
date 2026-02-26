@@ -29,7 +29,7 @@ export default function DashboardPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Array<{ _id?: string; senderId: string; content: string; createdAt?: string }>>([]);
+  const [messages, setMessages] = useState<Array<{ _id?: string; senderId: string; content: string; createdAt?: string; readBy?: Array<{ userId: string; readAt: string }> }>>([]);
   const [text, setText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [typing, setTyping] = useState(false);
@@ -147,6 +147,7 @@ export default function DashboardPage() {
         senderId?: string;
         content?: string;
         createdAt?: string;
+        readBy?: Array<{ userId: string; readAt: string }>;
       };
       setMessages((prev) => {
         if (!conversationId) return prev;
@@ -155,7 +156,7 @@ export default function DashboardPage() {
         if (prev.find((old: any) => old._id === m._id)) return prev;
         return [
           ...prev,
-          m as { senderId: string; content: string; createdAt?: string; _id?: string },
+          m as { senderId: string; content: string; createdAt?: string; _id?: string; readBy?: Array<{ userId: string; readAt: string }> },
         ];
       });
     };
@@ -220,6 +221,22 @@ export default function DashboardPage() {
       (window as any).typingTimeout = setTimeout(() => setTyping(false), 2000);
     };
 
+    const handleMessageRead = ({ messageId, userId }: { messageId?: string; userId?: string }) => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg._id === messageId && !msg.readBy?.find((r) => r.userId === userId)
+            ? {
+                ...msg,
+                readBy: [
+                  ...(msg.readBy || []),
+                  { userId: userId || "", readAt: new Date().toISOString() },
+                ],
+              }
+            : msg
+        )
+      );
+    };
+
     // Register all listeners
     s.on("connect", handleConnect);
     s.on("newMessage", handleNewMessage);
@@ -227,6 +244,7 @@ export default function DashboardPage() {
     s.on("presence", handlePresence);
     s.on("userSettingsUpdated", handleUserSettingsUpdated);
     s.on("typing", handleTyping);
+    s.on("messageRead", handleMessageRead);
 
     // Clean up listeners on unmount
     return () => {
@@ -236,6 +254,7 @@ export default function DashboardPage() {
       s.off("presence", handlePresence);
       s.off("userSettingsUpdated", handleUserSettingsUpdated);
       s.off("typing", handleTyping);
+      s.off("messageRead", handleMessageRead);
     };
   }, [token, conversationId, messages, selectedUserId]);
 
@@ -310,6 +329,21 @@ export default function DashboardPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, selectedUserId]);
 
+  // Mark messages as read when viewing
+  useEffect(() => {
+    if (!conversationId || !user || !messages.length || settings.readReceiptsEnabled === false) return;
+
+    const unreadMessages = messages.filter(
+      (m) => m.senderId !== user._id && !m.readBy?.some((r) => r.userId === user._id)
+    );
+
+    unreadMessages.forEach((m) => {
+      if (m._id && socketRef.current?.connected) {
+        socketRef.current?.emit("markAsRead", { messageId: m._id });
+      }
+    });
+  }, [messages, conversationId, user, settings.readReceiptsEnabled]);
+
   if (loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center">Loading</div>
@@ -353,15 +387,22 @@ export default function DashboardPage() {
                   <span>👤</span>
                 </div>
               )}
-              <div className="flex-1 truncate flex items-center gap-2">
-                <div className="truncate text-sm">
-                  {u.nickname || u.displayName || "User"}
+              <div className="flex-1 truncate flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <div className="truncate text-sm">
+                    {u.nickname || u.displayName || "User"}
+                  </div>
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      u.isOnline ? "bg-green-500" : "bg-gray-300"
+                    }`}
+                  />
                 </div>
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    u.isOnline ? "bg-green-500" : "bg-gray-300"
-                  }`}
-                />
+                {u.lastSeen && (
+                  <div className="text-xs text-gray-400 truncate">
+                    {new Date(u.lastSeen).toLocaleString()}
+                  </div>
+                )}
               </div>
             </button>
           ))}
@@ -401,12 +442,18 @@ export default function DashboardPage() {
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {messages.map((m) => {
                 const mine = m.senderId === user._id;
+                const isRead = m.readBy?.some((r) => r.userId === selectedUserId);
                 return (
                   <div
                     key={m._id || Math.random()}
-                    className={`max-w-[70%] px-3 py-2 rounded-lg border ${mine ? "ml-auto bg-black text-white border-black" : "bg-white border-gray-200"}`}
+                    className={`max-w-[70%] px-3 py-2 rounded-lg border flex items-end gap-2 ${mine ? "ml-auto bg-black text-white border-black" : "bg-white border-gray-200"}`}
                   >
-                    {m.content}
+                    <span>{m.content}</span>
+                    {mine && settings.readReceiptsEnabled && (
+                      <span className={`text-xs ${isRead ? "text-blue-300" : "text-gray-300"}`}>
+                        {isRead ? "✓✓" : "✓"}
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -458,9 +505,14 @@ export default function DashboardPage() {
                     <div className="truncate text-sm font-medium">
                       {c.other.nickname || c.other.displayName || "User"}
                     </div>
+                    {c.other.lastSeen && (
+                      <div className="text-xs text-gray-400 truncate">
+                        {new Date(c.other.lastSeen).toLocaleString()}
+                      </div>
+                    )}
                   </div>
                   <span
-                    className={`h-2 w-2 rounded-full ${
+                    className={`h-2 w-2 rounded-full flex-shrink-0 ${
                       c.other.isOnline ? "bg-green-500" : "bg-gray-300"
                     }`}
                   />
