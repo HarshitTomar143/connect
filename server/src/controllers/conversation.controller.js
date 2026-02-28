@@ -1,4 +1,5 @@
 import Conversation from "../models/Conversation.js";
+import Message from "../models/Message.js";
 import asyncHandler from "../middleware/asyncHandler.js";
 
 export const createConversation = asyncHandler(async (req, res) => {
@@ -38,27 +39,38 @@ export const getUserConversations = asyncHandler(async (req, res) => {
     )
     .sort({ updatedAt: -1 });
 
-  const shaped = conversations.map((c) => {
-    const parts = c.participants.map((p) => p.toObject());
-    const other = parts.find((p) => String(p._id) !== String(userId)) || parts[0];
-    const otherShaped = {
-      _id: other._id,
-      displayName: other.displayName,
-      nickname: other.nickname,
-      email: other.email,
-      avatar: other.avatar,
-      isOnline: other.isOnline,
-      lastSeen: other.showLastSeen ? other.lastSeen : null,
-      location: other.shareLocation ? other.location || null : null,
-    };
-    return {
-      _id: c._id,
-      other: otherShaped,
-      lastMessage: c.lastMessage || "",
-      updatedAt: c.updatedAt,
-      createdAt: c.createdAt,
-    };
-  });
+  // compute unread counts for each conversation
+  const shaped = await Promise.all(
+    conversations.map(async (c) => {
+      // count messages not sent by current user and not read by them
+      const unreadCount = await Message.countDocuments({
+        conversationId: c._id,
+        senderId: { $ne: userId },
+        "readBy.userId": { $ne: userId },
+      });
+
+      const parts = c.participants.map((p) => p.toObject());
+      const other = parts.find((p) => String(p._id) !== String(userId)) || parts[0];
+      const otherShaped = {
+        _id: other._id,
+        displayName: other.displayName,
+        nickname: other.nickname,
+        email: other.email,
+        avatar: other.avatar,
+        isOnline: other.isOnline,
+        lastSeen: other.showLastSeen ? other.lastSeen : null,
+        location: other.shareLocation ? other.location || null : null,
+      };
+      return {
+        _id: c._id,
+        other: otherShaped,
+        lastMessage: c.lastMessage || "",
+        updatedAt: c.updatedAt,
+        createdAt: c.createdAt,
+        unreadCount,
+      };
+    })
+  );
 
   res.json(shaped);
 });

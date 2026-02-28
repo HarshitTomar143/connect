@@ -56,6 +56,14 @@ const socketHandler = (io) => {
     // Personal room (ALL devices join)
     socket.join(userId);
 
+    // also join all conversation rooms so we can receive notifications for any chat
+    try {
+      const convs = await Conversation.find({ participants: userId }).select("_id");
+      convs.forEach((c) => socket.join(c._id.toString()));
+    } catch (err) {
+      console.error("Failed to join conversation rooms on connect", err);
+    }
+
     // 🔄 Reconnection Sync
     socket.on("syncMessages", async ({ lastSyncTime }) => {
       try {

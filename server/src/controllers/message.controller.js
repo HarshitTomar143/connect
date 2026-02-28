@@ -83,10 +83,23 @@ export const sendMessage = async (req, res, next) => {
 
 export const getMessages = asyncHandler(async (req, res) => {
   const { conversationId } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const skip = (page - 1) * limit;
 
+  const total = await Message.countDocuments({ conversationId });
   const messages = await Message.find({ conversationId })
     .sort({ createdAt: -1 })
-    .limit(20);
+    .skip(skip)
+    .limit(limit);
 
-  res.json(messages.reverse());
+  res.json({
+    messages: messages.reverse(),
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+    }
+  });
 });

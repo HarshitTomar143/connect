@@ -1,26 +1,79 @@
 @import "tailwindcss";
 
+/* Theme variables used by app. We support light, dark and auto (system) modes. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --muted: #6b7280;
+  --text: #0f172a;
+  --accent: #2563eb; /* blue-600 */
+  --accent-600: #1e40af;
+  --card-shadow: 0 1px 2px rgba(15,23,42,0.04);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+.theme-light {
+  --bg: #f3f4f6; /* gray-100 */
+  --surface: #ffffff;
+  --muted: #6b7280;
+  --text: #0f172a;
+  --accent: #2563eb;
+  --accent-600: #1e40af;
+  --card-shadow: 0 1px 2px rgba(15,23,42,0.04);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.theme-dark {
+  --bg: #071026; /* deep navy */
+  --surface: #0b1430; /* slightly lighter panel */
+  --muted: #9aa4b2;
+  --text: #e6eef8;
+  --accent: #60a5fa; /* lighter blue for dark */
+  --accent-600: #3b82f6;
+  --card-shadow: 0 2px 6px rgba(2,6,23,0.6);
+}
+
+/* Smooth color transitions */
+html, body {
+  transition: background-color 160ms ease, color 160ms ease;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Small helpers for components that read variables */
+.app-surface {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--card-shadow);
+}
+
+.accent {
+  color: var(--accent);
+}
+
+.accent-bg {
+  background-image: linear-gradient(90deg, var(--accent), var(--accent-600));
+}
+
+/* Scrollbar styling that adapts to theme variables */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(100,116,139,0.3);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.theme-dark *::-webkit-scrollbar-thumb {
+  background-color: rgba(255,255,255,0.08);
+}
+.theme-light *::-webkit-scrollbar-thumb {
+  background-color: rgba(15,23,42,0.08);
 }
