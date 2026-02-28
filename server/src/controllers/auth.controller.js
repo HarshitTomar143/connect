@@ -5,7 +5,7 @@ import asyncHandler from "../middleware/asyncHandler.js";
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: "15m",
+    expiresIn: "3h",
   });
 
 export const register = asyncHandler(async (req, res) => {
@@ -37,6 +37,7 @@ export const register = asyncHandler(async (req, res) => {
     httpOnly: true,
     secure: false,
     sameSite: "lax",
+    maxAge: 3 * 60 * 60 * 1000,
   });
 
   res.status(201).json({
@@ -83,7 +84,7 @@ export const logout = asyncHandler(async (req, res) => {
 });
 
 export const getProfile = asyncHandler(async (req, res) => {
-  // req.user is populated by protect middleware with -passwordHash selection
+
   const user = await User.findById(req.user._id).select(
     "_id email displayName nickname avatar about createdAt updatedAt"
   );

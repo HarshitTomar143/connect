@@ -55,7 +55,7 @@ export default function DashboardPage() {
   const socketRef = useRef<Socket | null>(null);
   const geolocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
 
-  // theme preference (must declare unconditionally before early returns)
+  
   const [theme, setTheme] = useState<"light" | "dark" | "auto">(() => {
     try {
       const saved = localStorage.getItem("theme");
@@ -103,7 +103,7 @@ export default function DashboardPage() {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
 
-  // Request geolocation on mount
+ 
   useEffect(() => {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -120,7 +120,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // helper to load recent conversations with unread counts
+  
   const loadRecents = useCallback(async () => {
     try {
       const c = await API.get("/conversations");
@@ -176,17 +176,17 @@ export default function DashboardPage() {
     
     let s = socketRef.current;
     
-    // Only create new connection if one doesn't exist
+    
     if (!s) {
       s = (connectSocket(token) as unknown) as Socket;
       socketRef.current = s;
     }
 
-    // Set up event listeners
+    
     const handleConnect = () => {
       console.log("Socket connected");
       
-      // Send current location if sharing is enabled
+      
       if (settings.shareLocation && geolocationRef.current) {
         const { latitude, longitude } = geolocationRef.current;
         const locationData = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
@@ -213,7 +213,7 @@ export default function DashboardPage() {
         readBy?: Array<{ userId: string; readAt: string }>;
       };
 
-      // if this message belongs to the current open conversation, append it
+      
       if (conversationId && String(m.conversationId) === String(conversationId)) {
         setMessages((prev) => {
           if (prev.find((old: any) => old._id === m._id)) return prev;
@@ -225,7 +225,7 @@ export default function DashboardPage() {
         return;
       }
 
-      // otherwise it's for another conversation – reload recents to update unread counts
+
       loadRecents();
     };
 
@@ -238,7 +238,7 @@ export default function DashboardPage() {
         return [...prev, ...add];
       });
 
-      // any missed messages may change unread counts; refresh recents
+      
       loadRecents();
     };
 
@@ -287,7 +287,7 @@ export default function DashboardPage() {
       if (String(userId) !== String(selectedUserId)) return;
       if (String(typingCid) !== String(conversationId)) return;
       setTyping(true);
-      // Clear typing indicator after 2 seconds of inactivity
+      
       if ((window as any).typingTimeout) clearTimeout((window as any).typingTimeout);
       (window as any).typingTimeout = setTimeout(() => setTyping(false), 2000);
     };
@@ -322,7 +322,7 @@ export default function DashboardPage() {
       }
     };
 
-    // Register all listeners
+    
     s.on("connect", handleConnect);
     s.on("newMessage", handleNewMessage);
     s.on("missedMessages", handleMissedMessages);
@@ -333,7 +333,7 @@ export default function DashboardPage() {
     s.on("messageDeleted", handleMessageDeleted);
     s.on("conversationDeleted", handleConversationDeleted);
 
-    // Clean up listeners on unmount
+    
     return () => {
       s.off("connect", handleConnect);
       s.off("newMessage", handleNewMessage);
@@ -362,7 +362,7 @@ export default function DashboardPage() {
         if (idx > -1) {
           const copy = [...prev];
           let [item] = copy.splice(idx, 1);
-          // clear unread count when opening conversation
+        
           item = { ...item, unreadCount: 0 };
           return [item, ...copy];
         }
@@ -404,14 +404,14 @@ export default function DashboardPage() {
   const sendMessage = async () => {
     if (!conversationId || !text.trim()) return;
     try {
-      // Send message via socket for instant delivery
+      
       if (socketRef.current && socketRef.current.connected) {
         socketRef.current.emit("sendMessage", {
           conversationId,
           content: text.trim(),
         });
       } else {
-        // Fallback to REST API if socket is not connected
+      
         const res = await API.post("/messages", {
           conversationId,
           content: text.trim(),
@@ -423,7 +423,7 @@ export default function DashboardPage() {
           createdAt?: string;
           conversationId: string;
         };
-        // Optimistically add message if it's for current conversation
+
         setMessages((prev) => {
           if (prev.find((m: any) => m._id === msg._id)) return prev;
           return [...prev, msg];
@@ -439,7 +439,7 @@ export default function DashboardPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, selectedUserId]);
 
-  // Mark messages as read when viewing
+  
   useEffect(() => {
     if (!conversationId || !user || !messages.length || settings.readReceiptsEnabled === false) return;
 
@@ -453,7 +453,7 @@ export default function DashboardPage() {
       }
     });
 
-    // also clear unread badge for this conversation in recents
+  
     setRecents((prev) =>
       prev.map((c) =>
         c._id === conversationId ? { ...c, unreadCount: 0 } : c
@@ -476,7 +476,7 @@ export default function DashboardPage() {
           <span className="text-lg font-bold">💬 Connect</span>
         </div>
         <div className="flex items-center gap-1">
-          {/* delete conversation button */}
+        
           {conversationId && (
             <button
               onClick={async () => {
@@ -497,7 +497,7 @@ export default function DashboardPage() {
               Delete
             </button>
           )}
-          {/* theme selector: light / auto / dark */}
+          
           <div className="flex items-center rounded-lg p-0.5 gap-0.5 bg-[var(--surface)]" role="tablist" aria-label="Theme">
             <button
               onClick={() => setTheme("light")}
@@ -528,12 +528,12 @@ export default function DashboardPage() {
       </header>
       <div className="flex flex-1" style={{ background: 'var(--bg)' }}>
         <aside className="w-72 border-r border-transparent flex flex-col app-surface">
-        {/* header/search section */}
+        
         <div className="p-4 flex-shrink-0 sticky top-0 z-10" style={{ background: 'var(--surface)' }}>
-          {/* profile display */}
+          
           <div className="flex items-center gap-2 mb-4">
             {user?.avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
+        
               <img
                 src={user.avatar}
                 alt="Your avatar"
@@ -556,7 +556,7 @@ export default function DashboardPage() {
             className="mb-2"
           />
         </div>
-        {/* scrollable user list */}
+
         <div className="flex-1 overflow-y-auto px-4 space-y-1">
           {(users || [])
             .filter((u) => {
@@ -582,7 +582,7 @@ export default function DashboardPage() {
               className={`w-full text-left px-3 py-2 rounded-md border flex items-center gap-3 ${selectedUserId === u._id ? "border-[var(--accent)]" : "border-[rgba(15,23,42,0.06)]"}`}
             >
               {u.avatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
+        
                 <img
                   src={u.avatar}
                   alt={(u.nickname || u.displayName || "User") + " avatar"}
@@ -751,7 +751,7 @@ export default function DashboardPage() {
                     className="w-full text-left px-3 py-2 rounded-md border flex items-center gap-3" style={{ border: '1px solid rgba(15,23,42,0.06)' }}
                   >
                     {c.other.avatar ? (
-                      // eslint-disable-next-line @next/next/no-img-element
+                  
                       <img
                         src={c.other.avatar}
                         alt={(c.other.nickname || c.other.displayName || "User") + " avatar"}
@@ -831,11 +831,11 @@ export default function DashboardPage() {
                 setSettings((s) => ({ ...s, shareLocation: next }));
                 await API.put("/settings", { shareLocation: next });
                 
-                // Get location if enabling share location
+            
                 let locationData = null;
                 if (next && geolocationRef.current) {
                   const { latitude, longitude } = geolocationRef.current;
-                  // Use coordinates as fallback, ideally would use reverse geocoding
+                
                   locationData = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
                 }
                 
@@ -856,7 +856,7 @@ export default function DashboardPage() {
                 setSettings((s) => ({ ...s, showLastSeen: next }));
                 await API.put("/settings", { showLastSeen: next });
                 socketRef.current?.emit("updateSettings", { showLastSeen: next });
-                // Refresh list to reflect lastSeen hiding instantly
+              
                 const res = await API.get("/users");
                 const list: UserItem[] = res.data || [];
                 const meId = user?._id ? String(user._id) : "";

@@ -12,7 +12,6 @@ export const createConversation = asyncHandler(async (req, res) => {
     throw new Error("Participant ID required");
   }
 
-  // Prevent duplicate conversations
   const existing = await Conversation.findOne({
     participants: { $all: [userId, participantId] },
   });
@@ -40,10 +39,10 @@ export const getUserConversations = asyncHandler(async (req, res) => {
     )
     .sort({ updatedAt: -1 });
 
-  // compute unread counts for each conversation
+  
   const shaped = await Promise.all(
     conversations.map(async (c) => {
-      // count messages not sent by current user and not read by them
+    
       const unreadCount = await Message.countDocuments({
         conversationId: c._id,
         senderId: { $ne: userId },
@@ -86,17 +85,17 @@ export const deleteConversation = asyncHandler(async (req, res) => {
     throw new Error("Conversation not found");
   }
 
-  // only participants can delete the conversation
+  
   if (!conv.participants.map((p) => p.toString()).includes(userId.toString())) {
     res.status(403);
     throw new Error("Unauthorized");
   }
 
-  // delete messages belonging to this conversation
+
   await Message.deleteMany({ conversationId });
   await Conversation.findByIdAndDelete(conversationId);
 
-  // notify participants via socket
+
   const io = getIO();
   io.to(conversationId.toString()).emit("conversationDeleted", { conversationId: conversationId.toString() });
 

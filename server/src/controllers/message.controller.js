@@ -20,7 +20,7 @@ export const sendMessage = async (req, res, next) => {
       content,
     });
 
-    // Update conversation lastMessage
+  
     conversation.lastMessage = content;
     await conversation.save();
 
@@ -34,7 +34,7 @@ export const sendMessage = async (req, res, next) => {
         throw new Error("Unauthorized access to conversation");
         }
 
-    // Convert ObjectIds to strings for socket emission
+
     const messageData = {
       _id: message._id.toString(),
       conversationId: message.conversationId.toString(),
@@ -45,10 +45,8 @@ export const sendMessage = async (req, res, next) => {
       readBy: message.readBy || [],
     };
 
-    // Emit to conversation room (all participants including sender)
     io.to(conversationId.toString()).emit("newMessage", messageData);
 
-    // 🔥 Delivery Status - mark as delivered for other participants
     conversation.participants.forEach(async (participantId) => {
       if (participantId.toString() !== senderId.toString()) {
         const sockets = io.sockets.adapter.rooms.get(participantId.toString());
@@ -113,17 +111,16 @@ export const deleteMessage = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Message not found" });
   }
 
-  // Only the sender can delete their own message
+ 
   if (message.senderId.toString() !== userId.toString()) {
     return res.status(403).json({ message: "Unauthorized to delete this message" });
   }
 
   const conversationId = message.conversationId;
 
-  // Delete the message
+
   await Message.findByIdAndDelete(messageId);
 
-  // Emit deletion event to all participants in the conversation
   const io = getIO();
   io.to(conversationId.toString()).emit("messageDeleted", {
     messageId: messageId.toString(),

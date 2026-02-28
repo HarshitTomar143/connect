@@ -4,12 +4,10 @@ import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import { handlePresence } from "./presence.js";
 
-const onlineUsers = new Map(); 
-// userId -> Set(socketIds)
+const onlineUsers = new Map();
 
 const socketHandler = (io) => {
 
-  // 🔐 Socket Authentication
   io.use((socket, next) => {
     try {
       let token = socket.handshake.auth && socket.handshake.auth.token;
@@ -34,7 +32,7 @@ const socketHandler = (io) => {
   io.on("connection", async (socket) => {
     const userId = socket.userId;
 
-    // 🧠 Multi-device handling
+  
     if (!onlineUsers.has(userId)) {
       onlineUsers.set(userId, new Set());
     }
@@ -43,7 +41,7 @@ const socketHandler = (io) => {
     const user = await User.findById(userId);
     await handlePresence(userId, true);
     
-    // Emit presence with privacy settings
+  
     io.emit("presence", {
       userId,
       isOnline: true,
@@ -53,10 +51,10 @@ const socketHandler = (io) => {
       shareLocation: user?.shareLocation,
     });
 
-    // Personal room (ALL devices join)
+    
     socket.join(userId);
 
-    // also join all conversation rooms so we can receive notifications for any chat
+  
     try {
       const convs = await Conversation.find({ participants: userId }).select("_id");
       convs.forEach((c) => socket.join(c._id.toString()));
@@ -64,7 +62,7 @@ const socketHandler = (io) => {
       console.error("Failed to join conversation rooms on connect", err);
     }
 
-    // 🔄 Reconnection Sync
+  
     socket.on("syncMessages", async ({ lastSyncTime }) => {
       try {
         const missedMessages = await Message.find({
@@ -78,12 +76,11 @@ const socketHandler = (io) => {
       }
     });
 
-    // Join conversation room
+    
     socket.on("joinConversation", (conversationId) => {
       socket.join(conversationId.toString());
     });
 
-    // 📨 Send message via socket
     socket.on("sendMessage", async (data) => {
       try {
         const { conversationId, content } = data;
@@ -107,11 +104,11 @@ const socketHandler = (io) => {
           content,
         });
 
-        // Update conversation lastMessage
+        
         conversation.lastMessage = content;
         await conversation.save();
 
-        // Convert ObjectIds to strings for socket emission
+      
         const messageData = {
           _id: message._id.toString(),
           conversationId: message.conversationId.toString(),
@@ -122,10 +119,10 @@ const socketHandler = (io) => {
           readBy: message.readBy || [],
         };
 
-        // Emit to all participants in conversation (including sender)
+    
         io.to(conversationId.toString()).emit("newMessage", messageData);
 
-        // Mark as delivered for other participants
+        
         conversation.participants.forEach(async (participantId) => {
           if (participantId.toString() !== senderId) {
             const sockets = io.sockets.adapter.rooms.get(participantId.toString());
@@ -156,12 +153,12 @@ const socketHandler = (io) => {
       }
     });
 
-    // Typing
+    
     socket.on("typing", ({ conversationId }) => {
       socket.to(conversationId.toString()).emit("typing", { userId, conversationId });
     });
 
-    // Update Profile/Settings (Location/LastSeen)
+    
     socket.on("updateSettings", async (data) => {
       try {
         const { shareLocation, showLastSeen, location } = data;
@@ -171,10 +168,10 @@ const socketHandler = (io) => {
         if (typeof showLastSeen === "boolean") updates.showLastSeen = showLastSeen;
         if (shareLocation && location) updates.location = location;
         
-        // Update user settings in database
+        
         const user = await User.findByIdAndUpdate(userId, updates, { new: true });
         
-        // Broadcast settings change to all users with proper privacy filtering
+      
         io.emit("userSettingsUpdated", {
           userId,
           showLastSeen: user?.showLastSeen,
@@ -188,7 +185,7 @@ const socketHandler = (io) => {
       }
     });
 
-    // Read Receipt
+    
     socket.on("markAsRead", async ({ messageId }) => {
       try {
         const message = await Message.findById(messageId);
@@ -197,13 +194,12 @@ const socketHandler = (io) => {
         const reader = await User.findById(userId).select("readReceiptsEnabled");
         const sender = await User.findById(message.senderId).select("readReceiptsEnabled");
         
-        // Check if reader has read receipts enabled (they can still receive read receipts from others)
-        // Check if sender wants to receive read receipts
+        
         if (!sender?.readReceiptsEnabled) {
           return;
         }
 
-        // Add user to readBy if not already there
+        
         const alreadyRead = message.readBy?.some((r) => r.userId.toString() === userId);
         if (!alreadyRead) {
           await Message.updateOne(
@@ -219,7 +215,7 @@ const socketHandler = (io) => {
           );
         }
 
-        // Emit to the message sender (in their personal room)
+      
         io.to(message.senderId.toString()).emit("messageRead", {
           messageId: messageId.toString(),
           userId: userId.toString(),
@@ -229,7 +225,7 @@ const socketHandler = (io) => {
       }
     });
 
-    // Disconnect
+    
     socket.on("disconnect", async () => {
       const userSockets = onlineUsers.get(userId);
       if (userSockets) {
@@ -239,7 +235,7 @@ const socketHandler = (io) => {
           const user = await User.findById(userId);
           await handlePresence(userId, false);
           
-          // Emit offline presence with privacy settings
+          
           io.emit("presence", {
             userId,
             isOnline: false,

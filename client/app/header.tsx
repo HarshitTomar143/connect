@@ -32,7 +32,7 @@ export default function Header() {
 
   const name = user?.nickname || user?.displayName || "";
 
-  // Hide header on auth pages to keep forms minimal
+
   if (pathname?.startsWith("/login") || pathname?.startsWith("/register")) {
     return null;
   }

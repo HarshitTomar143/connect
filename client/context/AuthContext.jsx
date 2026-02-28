@@ -10,14 +10,13 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(null);
 
-  // attempt to restore user on mount
+  
   useEffect(() => {
     const fetchProfile = async () => {
       try {
         const res = await API.get("/auth/profile");
           setUser(res.data);
-          // token remains in cookie; no need to set
-        // try to restore token from storage if available
+          
         const saved = localStorage.getItem("token");
         if (saved) setToken(saved);
       } catch (err) {
