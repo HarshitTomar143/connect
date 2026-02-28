@@ -103,3 +103,32 @@ export const getMessages = asyncHandler(async (req, res) => {
     }
   });
 });
+
+export const deleteMessage = asyncHandler(async (req, res) => {
+  const { messageId } = req.params;
+  const userId = req.user._id;
+
+  const message = await Message.findById(messageId);
+  if (!message) {
+    return res.status(404).json({ message: "Message not found" });
+  }
+
+  // Only the sender can delete their own message
+  if (message.senderId.toString() !== userId.toString()) {
+    return res.status(403).json({ message: "Unauthorized to delete this message" });
+  }
+
+  const conversationId = message.conversationId;
+
+  // Delete the message
+  await Message.findByIdAndDelete(messageId);
+
+  // Emit deletion event to all participants in the conversation
+  const io = getIO();
+  io.to(conversationId.toString()).emit("messageDeleted", {
+    messageId: messageId.toString(),
+    conversationId: conversationId.toString(),
+  });
+
+  res.json({ message: "Message deleted successfully" });
+});

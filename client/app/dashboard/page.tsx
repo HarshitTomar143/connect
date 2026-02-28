@@ -308,6 +308,10 @@ export default function DashboardPage() {
       );
     };
 
+    const handleMessageDeleted = ({ messageId }: { messageId?: string }) => {
+      setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
+    };
+
     // Register all listeners
     s.on("connect", handleConnect);
     s.on("newMessage", handleNewMessage);
@@ -316,6 +320,7 @@ export default function DashboardPage() {
     s.on("userSettingsUpdated", handleUserSettingsUpdated);
     s.on("typing", handleTyping);
     s.on("messageRead", handleMessageRead);
+    s.on("messageDeleted", handleMessageDeleted);
 
     // Clean up listeners on unmount
     return () => {
@@ -326,6 +331,7 @@ export default function DashboardPage() {
       s.off("userSettingsUpdated", handleUserSettingsUpdated);
       s.off("typing", handleTyping);
       s.off("messageRead", handleMessageRead);
+      s.off("messageDeleted", handleMessageDeleted);
     };
   }, [token, conversationId, messages, selectedUserId, loadRecents]);
 
@@ -453,18 +459,18 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-dvh flex flex-col">
-      <header className="h-12 flex items-center justify-between px-4 app-surface">
-        <div className="flex items-center gap-3">
-          <span className="text-lg font-semibold">Connect Chat</span>
+      <header className="h-11 flex items-center justify-between px-2 app-surface border-b border-transparent" style={{ borderColor: 'rgba(15,23,42,0.06)' }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-lg font-bold">💬 Connect</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {/* theme selector: light / auto / dark */}
-          <div className="flex items-center rounded-md p-1" role="tablist" aria-label="Theme">
+          <div className="flex items-center rounded-lg p-0.5 gap-0.5 bg-[var(--surface)]" role="tablist" aria-label="Theme">
             <button
               onClick={() => setTheme("light")}
               role="tab"
               aria-selected={theme === "light"}
-              className={`px-3 py-1 text-sm rounded ${theme === "light" ? "bg-[var(--surface)] text-[var(--text)] font-medium" : "text-[var(--muted)]"}`}
+              className={`px-2 py-1 text-xs rounded-md transition-colors ${theme === "light" ? "bg-white text-[var(--text)] font-semibold shadow-sm" : "text-[var(--muted)] hover:text-[var(--text)]"}`}
             >
               Light
             </button>
@@ -472,7 +478,7 @@ export default function DashboardPage() {
               onClick={() => setTheme("auto")}
               role="tab"
               aria-selected={theme === "auto"}
-              className={`mx-1 px-3 py-1 text-sm rounded ${theme === "auto" ? "bg-[var(--surface)] text-[var(--text)] font-medium" : "text-[var(--muted)]"}`}
+              className={`px-2 py-1 text-xs rounded-md transition-colors ${theme === "auto" ? "bg-white text-[var(--text)] font-semibold shadow-sm" : "text-[var(--muted)] hover:text-[var(--text)]"}`}
             >
               Auto
             </button>
@@ -480,7 +486,7 @@ export default function DashboardPage() {
               onClick={() => setTheme("dark")}
               role="tab"
               aria-selected={theme === "dark"}
-              className={`px-3 py-1 text-sm rounded ${theme === "dark" ? "bg-[var(--surface)] text-[var(--text)] font-medium" : "text-[var(--muted)]"}`}
+              className={`px-2 py-1 text-xs rounded-md transition-colors ${theme === "dark" ? "bg-white text-[var(--text)] font-semibold shadow-sm" : "text-[var(--muted)] hover:text-[var(--text)]"}`}
             >
               Dark
             </button>
@@ -627,17 +633,38 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={m._id || Math.random()}
-                    className={`max-w-[70%] px-3 py-2 flex flex-col gap-1 break-words whitespace-pre-wrap shadow-sm border ${mine ? "ml-auto bg-[var(--accent)] text-white border-transparent rounded-tl-xl rounded-br-xl" : "bg-[var(--surface)] text-[var(--text)] border-[rgba(15,23,42,0.06)] rounded-tr-xl rounded-bl-xl"}`}
+                    className="group flex items-end gap-2"
+                    style={{ alignSelf: mine ? 'flex-end' : 'flex-start' }}
                   >
-                    <span>{sanitizeContent(m.content)}</span>
-                    <div className={`flex items-center gap-2 text-xs ${mine ? "text-[rgba(255,255,255,0.8)]" : "text-[var(--muted)]"}`}>
-                      <span>{messageTime}</span>
-                      {mine && settings.readReceiptsEnabled && (
-                        <span className={isRead ? "text-blue-300" : "text-gray-300"}>
-                          {isRead ? "✓✓" : "✓"}
-                        </span>
-                      )}
+                    <div
+                      className={`max-w-[70%] px-3 py-2 flex flex-col gap-1 break-words whitespace-pre-wrap shadow-sm border ${mine ? "ml-auto bg-[var(--accent)] text-white border-transparent rounded-tl-xl rounded-br-xl" : "bg-[var(--surface)] text-[var(--text)] border-[rgba(15,23,42,0.06)] rounded-tr-xl rounded-bl-xl"}`}
+                    >
+                      <span>{sanitizeContent(m.content)}</span>
+                      <div className={`flex items-center gap-2 text-xs ${mine ? "text-[rgba(255,255,255,0.8)]" : "text-[var(--muted)]"}`}>
+                        <span>{messageTime}</span>
+                        {mine && settings.readReceiptsEnabled && (
+                          <span className={isRead ? "text-blue-300" : "text-gray-300"}>
+                            {isRead ? "✓✓" : "✓"}
+                          </span>
+                        )}
+                      </div>
                     </div>
+                    {mine && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await API.delete(`/messages/${m._id}`);
+                            setMessages((prev) => prev.filter((msg) => msg._id !== m._id));
+                          } catch (err) {
+                            console.error("Failed to delete message:", err);
+                          }
+                        }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-xs px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded flex-shrink-0"
+                        title="Delete message"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 );
               })}
