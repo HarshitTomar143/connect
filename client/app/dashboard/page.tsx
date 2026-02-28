@@ -312,6 +312,16 @@ export default function DashboardPage() {
       setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
     };
 
+    const handleConversationDeleted = ({ conversationId: deletedId }: { conversationId?: string }) => {
+      if (!deletedId) return;
+      setRecents((prev) => prev.filter((c) => String(c._id) !== String(deletedId)));
+      if (String(conversationId) === String(deletedId)) {
+        setConversationId(null);
+        setSelectedUserId(null);
+        setMessages([]);
+      }
+    };
+
     // Register all listeners
     s.on("connect", handleConnect);
     s.on("newMessage", handleNewMessage);
@@ -321,6 +331,7 @@ export default function DashboardPage() {
     s.on("typing", handleTyping);
     s.on("messageRead", handleMessageRead);
     s.on("messageDeleted", handleMessageDeleted);
+    s.on("conversationDeleted", handleConversationDeleted);
 
     // Clean up listeners on unmount
     return () => {
@@ -332,6 +343,7 @@ export default function DashboardPage() {
       s.off("typing", handleTyping);
       s.off("messageRead", handleMessageRead);
       s.off("messageDeleted", handleMessageDeleted);
+      s.off("conversationDeleted", handleConversationDeleted);
     };
   }, [token, conversationId, messages, selectedUserId, loadRecents]);
 
@@ -464,6 +476,27 @@ export default function DashboardPage() {
           <span className="text-lg font-bold">💬 Connect</span>
         </div>
         <div className="flex items-center gap-1">
+          {/* delete conversation button */}
+          {conversationId && (
+            <button
+              onClick={async () => {
+                if (!confirm("Delete this conversation and all messages? This cannot be undone.")) return;
+                try {
+                  await API.delete(`/conversations/${conversationId}`);
+                  setMessages([]);
+                  setConversationId(null);
+                  setSelectedUserId(null);
+                  await loadRecents();
+                } catch (err) {
+                  console.error("Failed to delete conversation:", err);
+                }
+              }}
+              className="text-sm text-red-600 px-2 py-1 rounded hover:bg-red-50"
+              title="Delete conversation"
+            >
+              Delete
+            </button>
+          )}
           {/* theme selector: light / auto / dark */}
           <div className="flex items-center rounded-lg p-0.5 gap-0.5 bg-[var(--surface)]" role="tablist" aria-label="Theme">
             <button

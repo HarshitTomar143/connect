@@ -1,6 +1,7 @@
 import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
 import asyncHandler from "../middleware/asyncHandler.js";
+import { getIO } from "../config/socket.js";
 
 export const createConversation = asyncHandler(async (req, res) => {
   const { participantId } = req.body;
@@ -73,4 +74,31 @@ export const getUserConversations = asyncHandler(async (req, res) => {
   );
 
   res.json(shaped);
+});
+
+export const deleteConversation = asyncHandler(async (req, res) => {
+  const { conversationId } = req.params;
+  const userId = req.user._id;
+
+  const conv = await Conversation.findById(conversationId);
+  if (!conv) {
+    res.status(404);
+    throw new Error("Conversation not found");
+  }
+
+  // only participants can delete the conversation
+  if (!conv.participants.map((p) => p.toString()).includes(userId.toString())) {
+    res.status(403);
+    throw new Error("Unauthorized");
+  }
+
+  // delete messages belonging to this conversation
+  await Message.deleteMany({ conversationId });
+  await Conversation.findByIdAndDelete(conversationId);
+
+  // notify participants via socket
+  const io = getIO();
+  io.to(conversationId.toString()).emit("conversationDeleted", { conversationId: conversationId.toString() });
+
+  res.json({ message: "Conversation deleted" });
 });
