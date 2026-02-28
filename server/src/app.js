@@ -39,6 +39,13 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/settings", settingsRoutes);
 
+app.get("/", (req, res) => {
+  res.send("🚀 Connect Backend is Live");
+});
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "OK" });
+});
+
 
 app.use(errorHandler);
 
