@@ -452,11 +452,9 @@ export default function DashboardPage() {
   if (!user) return null;
 
   return (
-    <div className="min-h-dvh flex flex-1 flex-col md:flex-row">
+    <div className="min-h-dvh flex flex-col">
       <header className="h-12 flex items-center justify-between px-4 app-surface">
-        <div className="flex items-center gap-2">
-          <Button className="h-8 px-2 text-xs" onClick={() => router.back()}>Back</Button>
-          <Button className="h-8 px-2 text-xs" onClick={() => router.push("/profile")}>Profile</Button>
+        <div className="flex items-center gap-3">
           <span className="text-lg font-semibold">Connect Chat</span>
         </div>
         <div className="flex items-center gap-2">
@@ -490,7 +488,7 @@ export default function DashboardPage() {
         </div>
       </header>
       <div className="flex flex-1" style={{ background: 'var(--bg)' }}>
-      <aside className="hidden md:flex w-full md:w-72 border-r border-transparent flex-col app-surface">
+        <aside className="w-72 border-r border-transparent flex flex-col app-surface">
         {/* header/search section */}
         <div className="p-4 flex-shrink-0 sticky top-0 z-10" style={{ background: 'var(--surface)' }}>
           {/* profile display */}
@@ -576,18 +574,12 @@ export default function DashboardPage() {
           ))}
         </div>
       </aside>
+
       <main className="flex-1 flex flex-col">
         {selectedUserId ? (
           <>
             <div className="h-14 border-b px-4 flex items-center justify-between" style={{ borderColor: 'rgba(15,23,42,0.06)', background: 'var(--surface)', boxShadow: 'var(--card-shadow)' }}>
-              <div className="flex items-center gap-2">
-                <button
-                  className="md:hidden h-8 px-2 text-xs bg-[var(--accent)] text-white rounded"
-                  onClick={() => setSelectedUserId(null)}
-                >
-                  Back
-                </button>
-                <div className="text-sm">
+              <div>
                 <div className="font-semibold">
                   {(users.find((x) => x._id === selectedUserId)?.nickname ||
                     users.find((x) => x._id === selectedUserId)?.displayName) ??
@@ -597,7 +589,7 @@ export default function DashboardPage() {
                       ?.displayName ??
                     "Chat"}
                 </div>
-                <div className="text-xs text-[var(--muted)] flex items-center gap-2">
+                <div className="text-xs text-[var(--muted)]">
                   {(() => {
                     const info =
                       users.find((x) => x._id === selectedUserId) ||
@@ -615,7 +607,6 @@ export default function DashboardPage() {
                   })()}
                 </div>
               </div>
-            </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3 overscroll-y-contain" style={{ background: 'transparent' }}>
               {messagesPagination.pages > 1 && messagesPagination.page < messagesPagination.pages && (
@@ -655,6 +646,7 @@ export default function DashboardPage() {
             <div className="border-t border-gray-200 p-3 flex gap-2">
               <Input
                 placeholder="Type a message"
+                className="text-sm md:text-base"
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
@@ -753,8 +745,8 @@ export default function DashboardPage() {
           </div>
         )}
       </main>
-     
-     <aside className="hidden md:flex w-full md:w-72 border-l border-transparent flex-col app-surface">
+
+      <aside className="w-72 border-l border-transparent flex flex-col app-surface">
         <div className="p-4 flex-1 overflow-y-auto space-y-4">
           <div className="text-sm font-semibold">Settings</div>
           <label className="flex items-center justify-between text-sm">
