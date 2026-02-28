@@ -15,12 +15,13 @@ import { errorHandler } from "./middleware/error.middleware.js";
 const app = express();
 
 app.use(helmet());
-//
+
 app.use(
   cors({
-    origin: (origin, callback) => {
-      callback(null, true);
-    },
+    origin: [
+      "http://localhost:3000",
+      "https://connect-delta-rosy.vercel.app",
+    ],
     credentials: true,
   })
 );

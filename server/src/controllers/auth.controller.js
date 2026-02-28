@@ -33,12 +33,7 @@ export const register = asyncHandler(async (req, res) => {
 
   const token = generateToken(user._id);
 
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: false,
-    sameSite: "none",
-    maxAge: 3 * 60 * 60 * 1000,
-  });
+ 
 
   res.status(201).json({
     _id: user._id,
@@ -66,7 +61,7 @@ export const login = asyncHandler(async (req, res) => {
 
   res.cookie("token", token, {
     httpOnly: true,
-    secure: false,
+    secure: true,
     sameSite: "none",
     maxAge: 3 * 60 * 60 * 1000,
   });
